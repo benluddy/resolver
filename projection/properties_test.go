@@ -3,7 +3,7 @@ package projection_test
 import (
 	"testing"
 
-	"github.com/operator-framework/operator-lifecycle-manager/pkg/controller/registry/resolver/projection"
+	"github.com/benluddy/resolver/projection"
 	"github.com/operator-framework/operator-registry/pkg/api"
 	"github.com/stretchr/testify/assert"
 )

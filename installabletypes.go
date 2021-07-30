@@ -5,8 +5,9 @@ import (
 	"strings"
 
 	"github.com/operator-framework/operator-lifecycle-manager/pkg/controller/registry"
-	"github.com/operator-framework/operator-lifecycle-manager/pkg/controller/registry/resolver/solver"
+	"github.com/benluddy/resolver/solver"
 	operatorregistry "github.com/operator-framework/operator-registry/pkg/registry"
+	"github.com/benluddy/resolver/cache"
 )
 
 type BundleInstallable struct {
@@ -55,7 +56,7 @@ func bundleId(bundle, channel string, catalog registry.CatalogKey) solver.Identi
 	return solver.IdentifierFromString(fmt.Sprintf("%s/%s/%s", catalog.String(), channel, bundle))
 }
 
-func NewBundleInstallableFromOperator(o *Operator) (BundleInstallable, error) {
+func NewBundleInstallableFromOperator(o *cache.Operator) (BundleInstallable, error) {
 	src := o.SourceInfo()
 	if src == nil {
 		return BundleInstallable{}, fmt.Errorf("unable to resolve the source of bundle %s", o.Identifier())
