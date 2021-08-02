@@ -228,7 +228,7 @@ func TestCatalogSnapshotExpired(t *testing.T) {
 func TestCatalogSnapshotFind(t *testing.T) {
 	type tc struct {
 		Name      string
-		Predicate OperatorPredicate
+		Predicate Predicate
 		Operators []*Operator
 		Expected  []*Operator
 	}

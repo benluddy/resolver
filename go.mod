@@ -10,7 +10,7 @@ require (
 	github.com/operator-framework/operator-registry v1.17.5
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.7.0
-	google.golang.org/grpc v1.39.0
+	google.golang.org/grpc v1.39.0 // indirect
 	k8s.io/apiextensions-apiserver v0.21.3
 	k8s.io/apimachinery v0.21.3
 )

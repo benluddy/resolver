@@ -3,8 +3,9 @@ package resolver
 import (
 	"encoding/json"
 
-	"github.com/operator-framework/operator-registry/pkg/api"
 	"github.com/benluddy/resolver/cache"
+	"github.com/operator-framework/operator-registry/pkg/api"
+	"github.com/operator-framework/operator-registry/pkg/registry"
 )
 
 func apiSetToDependencies(crds, apis cache.APISet) (out []*api.Dependency) {
@@ -13,7 +14,7 @@ func apiSetToDependencies(crds, apis cache.APISet) (out []*api.Dependency) {
 	}
 	out = make([]*api.Dependency, 0)
 	for a := range crds {
-		val, err := json.Marshal(opregistry.GVKDependency{
+		val, err := json.Marshal(registry.GVKDependency{
 			Group:   a.Group,
 			Kind:    a.Kind,
 			Version: a.Version,
@@ -22,12 +23,12 @@ func apiSetToDependencies(crds, apis cache.APISet) (out []*api.Dependency) {
 			panic(err)
 		}
 		out = append(out, &api.Dependency{
-			Type:  opregistry.GVKType,
+			Type:  registry.GVKType,
 			Value: string(val),
 		})
 	}
 	for a := range apis {
-		val, err := json.Marshal(opregistry.GVKDependency{
+		val, err := json.Marshal(registry.GVKDependency{
 			Group:   a.Group,
 			Kind:    a.Kind,
 			Version: a.Version,
@@ -36,7 +37,7 @@ func apiSetToDependencies(crds, apis cache.APISet) (out []*api.Dependency) {
 			panic(err)
 		}
 		out = append(out, &api.Dependency{
-			Type:  opregistry.GVKType,
+			Type:  registry.GVKType,
 			Value: string(val),
 		})
 	}
@@ -49,7 +50,7 @@ func apiSetToDependencies(crds, apis cache.APISet) (out []*api.Dependency) {
 func apiSetToProperties(crds, apis cache.APISet, deprecated bool) (out []*api.Property) {
 	out = make([]*api.Property, 0)
 	for a := range crds {
-		val, err := json.Marshal(opregistry.GVKProperty{
+		val, err := json.Marshal(registry.GVKProperty{
 			Group:   a.Group,
 			Kind:    a.Kind,
 			Version: a.Version,
@@ -58,12 +59,12 @@ func apiSetToProperties(crds, apis cache.APISet, deprecated bool) (out []*api.Pr
 			panic(err)
 		}
 		out = append(out, &api.Property{
-			Type:  opregistry.GVKType,
+			Type:  registry.GVKType,
 			Value: string(val),
 		})
 	}
 	for a := range apis {
-		val, err := json.Marshal(opregistry.GVKProperty{
+		val, err := json.Marshal(registry.GVKProperty{
 			Group:   a.Group,
 			Kind:    a.Kind,
 			Version: a.Version,
@@ -72,17 +73,17 @@ func apiSetToProperties(crds, apis cache.APISet, deprecated bool) (out []*api.Pr
 			panic(err)
 		}
 		out = append(out, &api.Property{
-			Type:  opregistry.GVKType,
+			Type:  registry.GVKType,
 			Value: string(val),
 		})
 	}
 	if deprecated {
-		val, err := json.Marshal(opregistry.DeprecatedProperty{})
+		val, err := json.Marshal(registry.DeprecatedProperty{})
 		if err != nil {
 			panic(err)
 		}
 		out = append(out, &api.Property{
-			Type:  opregistry.DeprecatedType,
+			Type:  registry.DeprecatedType,
 			Value: string(val),
 		})
 	}
@@ -91,4 +92,3 @@ func apiSetToProperties(crds, apis cache.APISet, deprecated bool) (out []*api.Pr
 	}
 	return
 }
-
