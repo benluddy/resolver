@@ -1,4 +1,4 @@
-package resolver
+package cache
 
 import (
 	"encoding/json"
@@ -875,7 +875,7 @@ func TestOperatorSourceInfo_String(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			i := &OperatorSourceInfo{
+			i := &Origin{
 				Package: tt.fields.Package,
 				Channel: tt.fields.Channel,
 				Catalog: registry.CatalogKey{Name: tt.fields.CatalogSource, Namespace: tt.fields.CatalogSourceNamespace},
@@ -1082,7 +1082,7 @@ func TestNewOperatorFromBundle(t *testing.T) {
 				providedAPIs: EmptyAPISet(),
 				requiredAPIs: EmptyAPISet(),
 				bundle:       bundleNoAPIs,
-				sourceInfo: &OperatorSourceInfo{
+				sourceInfo: &Origin{
 					Package: "testPackage",
 					Channel: "testChannel",
 					Catalog: registry.CatalogKey{Name: "source", Namespace: "testNamespace"},
@@ -1145,7 +1145,7 @@ func TestNewOperatorFromBundle(t *testing.T) {
 					},
 				},
 				bundle: bundleWithAPIs,
-				sourceInfo: &OperatorSourceInfo{
+				sourceInfo: &Origin{
 					Package: "testPackage",
 					Channel: "testChannel",
 					Catalog: registry.CatalogKey{Name: "source", Namespace: "testNamespace"},
@@ -1163,7 +1163,7 @@ func TestNewOperatorFromBundle(t *testing.T) {
 				providedAPIs: EmptyAPISet(),
 				requiredAPIs: EmptyAPISet(),
 				bundle:       bundleWithAPIsUnextracted,
-				sourceInfo: &OperatorSourceInfo{
+				sourceInfo: &Origin{
 					Package: "testPackage",
 					Channel: "testChannel",
 					Catalog: registry.CatalogKey{Name: "source", Namespace: "testNamespace"},
@@ -1183,7 +1183,7 @@ func TestNewOperatorFromBundle(t *testing.T) {
 				providedAPIs: EmptyAPISet(),
 				requiredAPIs: EmptyAPISet(),
 				bundle:       bundleNoAPIs,
-				sourceInfo: &OperatorSourceInfo{
+				sourceInfo: &Origin{
 					Package:        "testPackage",
 					Channel:        "testChannel",
 					Catalog:        registry.CatalogKey{Name: "source", Namespace: "testNamespace"},
@@ -1221,7 +1221,7 @@ func TestNewOperatorFromBundle(t *testing.T) {
 					},
 				},
 				bundle: bundleWithPropsAndDeps,
-				sourceInfo: &OperatorSourceInfo{
+				sourceInfo: &Origin{
 					Package: "testPackage",
 					Channel: "testChannel",
 					Catalog: registry.CatalogKey{Name: "source", Namespace: "testNamespace"},

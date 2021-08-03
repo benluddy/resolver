@@ -1,4 +1,4 @@
-package resolver
+package cache
 
 import (
 	"encoding/json"
@@ -11,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
-	"github.com/operator-framework/operator-lifecycle-manager/pkg/controller/registry"
 	"github.com/operator-framework/operator-registry/pkg/api"
 	opregistry "github.com/operator-framework/operator-registry/pkg/registry"
 )
@@ -137,21 +136,21 @@ func (s APISet) StripPlural() APISet {
 	return set
 }
 
-type APIOwnerSet map[opregistry.APIKey]OperatorSurface
+type APIOwnerSet map[opregistry.APIKey]*Operator
 
 func EmptyAPIOwnerSet() APIOwnerSet {
-	return map[opregistry.APIKey]OperatorSurface{}
+	return map[opregistry.APIKey]*Operator{}
 }
 
-type OperatorSet map[string]OperatorSurface
+type OperatorSet map[string]*Operator
 
 func EmptyOperatorSet() OperatorSet {
-	return map[string]OperatorSurface{}
+	return map[string]*Operator{}
 }
 
 // Snapshot returns a new set, pointing to the same values
 func (o OperatorSet) Snapshot() OperatorSet {
-	out := make(map[string]OperatorSurface)
+	out := make(map[string]*Operator)
 	for key, val := range o {
 		out[key] = val
 	}
@@ -190,116 +189,38 @@ func (s APIMultiOwnerSet) PopAPIRequirers() OperatorSet {
 	return nil
 }
 
-type OperatorSourceInfo struct {
-	Package        string
-	Channel        string
-	StartingCSV    string
-	Catalog        registry.CatalogKey
-	DefaultChannel bool
-	Subscription   *v1alpha1.Subscription
-}
+// sourceinfo -> SourceLabels
+// type Origin struct {
+// 	Package        string
+// 	Channel        string
+// 	StartingCSV    string
+// 	SourceKey      SourceKey
+// 	DefaultChannel bool
+// 	Subscription   *v1alpha1.Subscription
+// }
 
-func (i *OperatorSourceInfo) String() string {
-	return fmt.Sprintf("%s/%s in %s/%s", i.Package, i.Channel, i.Catalog.Name, i.Catalog.Namespace)
-}
-
-var NoCatalog = registry.CatalogKey{Name: "", Namespace: ""}
-var ExistingOperator = OperatorSourceInfo{Package: "", Channel: "", StartingCSV: "", Catalog: NoCatalog, DefaultChannel: false}
-
-// OperatorSurface describes the API surfaces provided and required by an Operator.
-type OperatorSurface interface {
-	ProvidedAPIs() APISet
-	RequiredAPIs() APISet
-	Identifier() string
-	Replaces() string
-	Version() *semver.Version
-	SourceInfo() *OperatorSourceInfo
-	Bundle() *api.Bundle
-	Inline() bool
-	Properties() []*api.Property
-	Skips() []string
-}
+// func (i *Origin) String() string {
+// 	// todo: is this user-facing? source key is opaque
+// 	return fmt.Sprintf("%s/%s in %v", i.Package, i.Channel, i.SourceKey)
+// }
 
 type Operator struct {
-	name         string
-	replaces     string
-	providedAPIs APISet
-	requiredAPIs APISet
-	version      *semver.Version
-	bundle       *api.Bundle
-	sourceInfo   *OperatorSourceInfo
-	properties   []*api.Property
-	skips        []string
-}
+	Name       string
+	Properties []*api.Property
 
-var _ OperatorSurface = &Operator{}
+	// todo: read these from properties, synthesize properties for now
+	Replaces  string
+	Skips     []string
+	SkipRange semver.Range
+	Channel   string
+	Package   string
+	Version   *semver.Version
 
-func NewOperatorFromBundle(bundle *api.Bundle, startingCSV string, sourceKey registry.CatalogKey, defaultChannel string) (*Operator, error) {
-	parsedVersion, err := semver.ParseTolerant(bundle.Version)
-	version := &parsedVersion
-	if err != nil {
-		version = nil
-	}
-	provided := APISet{}
-	for _, gvk := range bundle.ProvidedApis {
-		provided[opregistry.APIKey{Plural: gvk.Plural, Group: gvk.Group, Kind: gvk.Kind, Version: gvk.Version}] = struct{}{}
-	}
-	required := APISet{}
-	for _, gvk := range bundle.RequiredApis {
-		required[opregistry.APIKey{Plural: gvk.Plural, Group: gvk.Group, Kind: gvk.Kind, Version: gvk.Version}] = struct{}{}
-	}
-	sourceInfo := &OperatorSourceInfo{
-		Package:     bundle.PackageName,
-		Channel:     bundle.ChannelName,
-		StartingCSV: startingCSV,
-		Catalog:     sourceKey,
-	}
-	sourceInfo.DefaultChannel = sourceInfo.Channel == defaultChannel
-
-	// legacy support - if the api doesn't contain properties/dependencies, build them from required/provided apis
-	properties := bundle.Properties
-	if len(properties) == 0 {
-		properties, err = providedAPIsToProperties(provided)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if len(bundle.Dependencies) > 0 {
-		ps, err := legacyDependenciesToProperties(bundle.Dependencies)
-		if err != nil {
-			return nil, fmt.Errorf("failed to translate legacy dependencies to properties: %w", err)
-		}
-		properties = append(properties, ps...)
-	} else {
-		ps, err := requiredAPIsToProperties(required)
-		if err != nil {
-			return nil, err
-		}
-		properties = append(properties, ps...)
-	}
-
-	o := &Operator{
-		name:         bundle.CsvName,
-		replaces:     bundle.Replaces,
-		version:      version,
-		providedAPIs: provided,
-		requiredAPIs: required,
-		bundle:       bundle,
-		sourceInfo:   sourceInfo,
-		properties:   properties,
-		skips:        bundle.Skips,
-	}
-
-	if !o.Inline() {
-		// TODO: Extract any necessary information from the Bundle
-		// up-front and remove the bundle field altogether. For now,
-		// take the easy opportunity to save heap space by discarding
-		// two of the worst offenders.
-		bundle.CsvJson = ""
-		bundle.Object = nil
-	}
-
-	return o, nil
+	SourceKey      SourceKey
+	SourceLabels   map[string]string
+	DefaultChannel bool
+	Subscription   *v1alpha1.Subscription
+	Bundle         *api.Bundle // TODO
 }
 
 func NewOperatorFromV1Alpha1CSV(csv *v1alpha1.ClusterServiceVersion) (*Operator, error) {
@@ -338,84 +259,19 @@ func NewOperatorFromV1Alpha1CSV(csv *v1alpha1.ClusterServiceVersion) (*Operator,
 	properties = append(properties, dependencies...)
 
 	return &Operator{
-		name:         csv.GetName(),
-		version:      &csv.Spec.Version.Version,
-		providedAPIs: providedAPIs,
-		requiredAPIs: requiredAPIs,
-		sourceInfo:   &ExistingOperator,
-		properties:   properties,
+		Name:       csv.GetName(),
+		Version:    &csv.Spec.Version.Version,
+		Properties: properties,
 	}, nil
 }
 
-func (o *Operator) Name() string {
-	return o.name
-}
-
-func (o *Operator) ProvidedAPIs() APISet {
-	return o.providedAPIs
-}
-
-func (o *Operator) RequiredAPIs() APISet {
-	return o.requiredAPIs
-}
-
-func (o *Operator) Identifier() string {
-	return o.name
-}
-
-func (o *Operator) Replaces() string {
-	return o.replaces
-}
-
-func (o *Operator) Skips() []string {
-	return o.skips
-}
-
-func (o *Operator) SetReplaces(replacing string) {
-	o.replaces = replacing
-}
-
-func (o *Operator) Package() string {
-	if o.bundle != nil {
-		return o.bundle.PackageName
-	}
-	return ""
-}
-
-func (o *Operator) Channel() string {
-	if o.bundle != nil {
-		return o.bundle.ChannelName
-	}
-	return ""
-}
-
-func (o *Operator) SourceInfo() *OperatorSourceInfo {
-	return o.sourceInfo
-}
-
-func (o *Operator) Bundle() *api.Bundle {
-	return o.bundle
-}
-
-func (o *Operator) Version() *semver.Version {
-	return o.version
-}
-
-func (o *Operator) SemverRange() (semver.Range, error) {
-	return semver.ParseRange(o.Bundle().SkipRange)
-}
-
 func (o *Operator) Inline() bool {
-	return o.bundle != nil && o.bundle.GetBundlePath() == ""
+	return o.Bundle != nil && o.Bundle.GetBundlePath() == ""
 }
 
-func (o *Operator) Properties() []*api.Property {
-	return o.properties
-}
-
-func (o *Operator) DependencyPredicates() (predicates []OperatorPredicate, err error) {
-	predicates = make([]OperatorPredicate, 0)
-	for _, property := range o.Properties() {
+func (o *Operator) DependencyPredicates() (predicates []Predicate, err error) {
+	predicates = make([]Predicate, 0)
+	for _, property := range o.Properties {
 		predicate, err := PredicateForProperty(property)
 		if err != nil {
 			return nil, err

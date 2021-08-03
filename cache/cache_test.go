@@ -1,4 +1,4 @@
-package resolver
+package cache
 
 import (
 	"context"
@@ -110,7 +110,7 @@ func TestOperatorCacheConcurrency(t *testing.T) {
 		}
 	}
 
-	c := NewOperatorCache(rcp, logrus.New(), catsrcLister)
+	c := New(rcp, logrus.New(), catsrcLister)
 
 	errs := make(chan error)
 	for w := 0; w < NWorkers; w++ {
@@ -160,7 +160,7 @@ func TestOperatorCacheExpiration(t *testing.T) {
 		}),
 	}
 
-	c := NewOperatorCache(rcp, logrus.New(), catsrcLister)
+	c := New(rcp, logrus.New(), catsrcLister)
 	c.ttl = 0 // instantly stale
 
 	require.Len(t, c.Namespaced("dummynamespace").Catalog(key).Find(CSVNamePredicate("csvname")), 1)
@@ -184,7 +184,7 @@ func TestOperatorCacheReuse(t *testing.T) {
 		}),
 	}
 
-	c := NewOperatorCache(rcp, logrus.New(), catsrcLister)
+	c := New(rcp, logrus.New(), catsrcLister)
 
 	require.Len(t, c.Namespaced("dummynamespace").Catalog(key).Find(CSVNamePredicate("csvname")), 1)
 }
@@ -228,7 +228,7 @@ func TestCatalogSnapshotExpired(t *testing.T) {
 func TestCatalogSnapshotFind(t *testing.T) {
 	type tc struct {
 		Name      string
-		Predicate OperatorPredicate
+		Predicate Predicate
 		Operators []*Operator
 		Expected  []*Operator
 	}
@@ -334,7 +334,7 @@ func TestStripPluralRequiredAndProvidedAPIKeys(t *testing.T) {
 		}),
 	}
 
-	c := NewOperatorCache(rcp, logrus.New(), catsrcLister)
+	c := New(rcp, logrus.New(), catsrcLister)
 
 	nc := c.Namespaced("testnamespace")
 	result, err := AtLeast(1, nc.Find(ProvidingAPIPredicate(opregistry.APIKey{Group: "g", Version: "v1", Kind: "K"})))
@@ -353,7 +353,7 @@ func TestNamespaceOperatorCacheError(t *testing.T) {
 	}
 
 	logger, _ := test.NewNullLogger()
-	c := NewOperatorCache(rcp, logger, catsrcLister)
+	c := New(rcp, logger, catsrcLister)
 	require.EqualError(t, c.Namespaced("dummynamespace").Error(), "error using catalog dummyname (in namespace dummynamespace): testing")
 	if snapshot, ok := c.snapshots[key]; !ok {
 		t.Fatalf("cache snapshot not found")

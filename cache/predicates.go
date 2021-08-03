@@ -1,4 +1,4 @@
-package resolver
+package cache
 
 import (
 	"bytes"
@@ -7,24 +7,23 @@ import (
 
 	"github.com/blang/semver/v4"
 
-	"github.com/operator-framework/operator-lifecycle-manager/pkg/controller/registry"
 	"github.com/operator-framework/operator-registry/pkg/api"
 	opregistry "github.com/operator-framework/operator-registry/pkg/registry"
 )
 
-type OperatorPredicate interface {
+type Predicate interface {
 	Test(*Operator) bool
 	String() string
 }
 
 type csvNamePredicate string
 
-func CSVNamePredicate(name string) OperatorPredicate {
+func CSVNamePredicate(name string) Predicate {
 	return csvNamePredicate(name)
 }
 
 func (c csvNamePredicate) Test(o *Operator) bool {
-	return o.Name() == string(c)
+	return o.Name == string(c)
 }
 
 func (c csvNamePredicate) String() string {
@@ -33,19 +32,13 @@ func (c csvNamePredicate) String() string {
 
 type channelPredicate string
 
-func ChannelPredicate(channel string) OperatorPredicate {
+func ChannelPredicate(channel string) Predicate {
 	return channelPredicate(channel)
 }
 
 func (ch channelPredicate) Test(o *Operator) bool {
 	// all operators match the empty channel
-	if string(ch) == "" {
-		return true
-	}
-	if o.Bundle() == nil {
-		return false
-	}
-	return o.Bundle().ChannelName == string(ch)
+	return ch == "" || o.Channel == string(ch)
 }
 
 func (ch channelPredicate) String() string {
@@ -54,12 +47,12 @@ func (ch channelPredicate) String() string {
 
 type pkgPredicate string
 
-func PkgPredicate(pkg string) OperatorPredicate {
+func PkgPredicate(pkg string) Predicate {
 	return pkgPredicate(pkg)
 }
 
 func (pkg pkgPredicate) Test(o *Operator) bool {
-	for _, p := range o.Properties() {
+	for _, p := range o.Properties {
 		if p.Type != opregistry.PackageType {
 			continue
 		}
@@ -72,7 +65,7 @@ func (pkg pkgPredicate) Test(o *Operator) bool {
 			return true
 		}
 	}
-	return o.Package() == string(pkg)
+	return o.Package == string(pkg)
 }
 
 func (pkg pkgPredicate) String() string {
@@ -84,12 +77,12 @@ type versionInRangePredicate struct {
 	str string
 }
 
-func VersionInRangePredicate(r semver.Range, version string) OperatorPredicate {
+func VersionInRangePredicate(r semver.Range, version string) Predicate {
 	return versionInRangePredicate{r: r, str: version}
 }
 
 func (v versionInRangePredicate) Test(o *Operator) bool {
-	for _, p := range o.Properties() {
+	for _, p := range o.Properties {
 		if p.Type != opregistry.PackageType {
 			continue
 		}
@@ -106,7 +99,7 @@ func (v versionInRangePredicate) Test(o *Operator) bool {
 			return true
 		}
 	}
-	return o.Version() != nil && v.r(*o.Version())
+	return o.Version != nil && v.r(*o.Version)
 }
 
 func (v versionInRangePredicate) String() string {
@@ -115,11 +108,11 @@ func (v versionInRangePredicate) String() string {
 
 type labelPredicate string
 
-func LabelPredicate(label string) OperatorPredicate {
+func LabelPredicate(label string) Predicate {
 	return labelPredicate(label)
 }
 func (l labelPredicate) Test(o *Operator) bool {
-	for _, p := range o.Properties() {
+	for _, p := range o.Properties {
 		if p.Type != opregistry.LabelType {
 			continue
 		}
@@ -139,34 +132,33 @@ func (l labelPredicate) String() string {
 	return fmt.Sprintf("with label: %v", string(l))
 }
 
-type catalogPredicate struct {
-	key registry.CatalogKey
+type sourcePredicate SourceKey
+
+func SourcePredicate(key SourceKey) Predicate {
+	return sourcePredicate(key)
 }
 
-func CatalogPredicate(key registry.CatalogKey) OperatorPredicate {
-	return catalogPredicate{key: key}
+func (c sourcePredicate) Test(o *Operator) bool {
+	return SourceKey(c) == o.SourceKey
 }
 
-func (c catalogPredicate) Test(o *Operator) bool {
-	return c.key.Equal(o.SourceInfo().Catalog)
-}
-
-func (c catalogPredicate) String() string {
-	return fmt.Sprintf("from catalog: %v/%v", c.key.Namespace, c.key.Name)
+func (c sourcePredicate) String() string {
+	// todo: key is opaque, but this needs to translate back to a catsrc ns/name
+	return fmt.Sprintf("from source with key : %v", SourceKey(c))
 }
 
 type gvkPredicate struct {
 	api opregistry.APIKey
 }
 
-func ProvidingAPIPredicate(api opregistry.APIKey) OperatorPredicate {
+func ProvidingAPIPredicate(api opregistry.APIKey) Predicate {
 	return gvkPredicate{
 		api: api,
 	}
 }
 
 func (g gvkPredicate) Test(o *Operator) bool {
-	for _, p := range o.Properties() {
+	for _, p := range o.Properties {
 		if p.Type != opregistry.GVKType {
 			continue
 		}
@@ -190,13 +182,12 @@ type skipRangeIncludesPredication struct {
 	version semver.Version
 }
 
-func SkipRangeIncludesPredicate(version semver.Version) OperatorPredicate {
+func SkipRangeIncludesPredicate(version semver.Version) Predicate {
 	return skipRangeIncludesPredication{version: version}
 }
 
 func (s skipRangeIncludesPredication) Test(o *Operator) bool {
-	semverRange, err := o.SemverRange()
-	return err == nil && semverRange(s.version)
+	return o.SkipRange(s.version)
 }
 
 func (s skipRangeIncludesPredication) String() string {
@@ -205,15 +196,15 @@ func (s skipRangeIncludesPredication) String() string {
 
 type replacesPredicate string
 
-func ReplacesPredicate(replaces string) OperatorPredicate {
+func ReplacesPredicate(replaces string) Predicate {
 	return replacesPredicate(replaces)
 }
 
 func (r replacesPredicate) Test(o *Operator) bool {
-	if o.Replaces() == string(r) {
+	if o.Replaces == string(r) {
 		return true
 	}
-	for _, s := range o.Skips() {
+	for _, s := range o.Skips {
 		if s == string(r) {
 			return true
 		}
@@ -226,10 +217,10 @@ func (r replacesPredicate) String() string {
 }
 
 type andPredicate struct {
-	predicates []OperatorPredicate
+	predicates []Predicate
 }
 
-func And(p ...OperatorPredicate) OperatorPredicate {
+func And(p ...Predicate) Predicate {
 	return andPredicate{
 		predicates: p,
 	}
@@ -255,14 +246,14 @@ func (p andPredicate) String() string {
 	return b.String()
 }
 
-func Or(p ...OperatorPredicate) OperatorPredicate {
+func Or(p ...Predicate) Predicate {
 	return orPredicate{
 		predicates: p,
 	}
 }
 
 type orPredicate struct {
-	predicates []OperatorPredicate
+	predicates []Predicate
 }
 
 func (p orPredicate) Test(o *Operator) bool {
@@ -289,7 +280,7 @@ type booleanPredicate struct {
 	result bool
 }
 
-func BooleanPredicate(result bool) OperatorPredicate {
+func BooleanPredicate(result bool) Predicate {
 	return booleanPredicate{result: result}
 }
 
@@ -304,16 +295,16 @@ func (b booleanPredicate) String() string {
 	return fmt.Sprintf("predicate is false")
 }
 
-func True() OperatorPredicate {
+func True() Predicate {
 	return BooleanPredicate(true)
 }
 
-func False() OperatorPredicate {
+func False() Predicate {
 	return BooleanPredicate(false)
 }
 
 type countingPredicate struct {
-	p OperatorPredicate
+	p Predicate
 	n *int
 }
 
@@ -327,11 +318,11 @@ func (c countingPredicate) Test(o *Operator) bool {
 func (c countingPredicate) String() string {
 	return c.p.String()
 }
-func CountingPredicate(p OperatorPredicate, n *int) OperatorPredicate {
+func CountingPredicate(p Predicate, n *int) Predicate {
 	return countingPredicate{p: p, n: n}
 }
 
-func PredicateForProperty(property *api.Property) (OperatorPredicate, error) {
+func PredicateForProperty(property *api.Property) (Predicate, error) {
 	if property == nil {
 		return nil, nil
 	}
@@ -342,13 +333,13 @@ func PredicateForProperty(property *api.Property) (OperatorPredicate, error) {
 	return p(property.Value)
 }
 
-var predicates = map[string]func(string) (OperatorPredicate, error){
+var predicates = map[string]func(string) (Predicate, error){
 	"olm.gvk.required":     predicateForRequiredGVKProperty,
 	"olm.package.required": predicateForRequiredPackageProperty,
 	"olm.label.required":   predicateForRequiredLabelProperty,
 }
 
-func predicateForRequiredGVKProperty(value string) (OperatorPredicate, error) {
+func predicateForRequiredGVKProperty(value string) (Predicate, error) {
 	var gvk struct {
 		Group   string `json:"group"`
 		Version string `json:"version"`
@@ -364,7 +355,7 @@ func predicateForRequiredGVKProperty(value string) (OperatorPredicate, error) {
 	}), nil
 }
 
-func predicateForRequiredPackageProperty(value string) (OperatorPredicate, error) {
+func predicateForRequiredPackageProperty(value string) (Predicate, error) {
 	var pkg struct {
 		PackageName  string `json:"packageName"`
 		VersionRange string `json:"versionRange"`
@@ -379,7 +370,7 @@ func predicateForRequiredPackageProperty(value string) (OperatorPredicate, error
 	return And(PkgPredicate(pkg.PackageName), VersionInRangePredicate(ver, pkg.VersionRange)), nil
 }
 
-func predicateForRequiredLabelProperty(value string) (OperatorPredicate, error) {
+func predicateForRequiredLabelProperty(value string) (Predicate, error) {
 	var label struct {
 		Label string `json:"label"`
 	}
